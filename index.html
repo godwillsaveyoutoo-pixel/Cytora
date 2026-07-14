@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-<title>Cytora - Vortex of Life</title>
+<title>Cytora - Vortex of cells</title>
 <style>
 :root{
   --bg0:#01040a;
@@ -1279,6 +1279,13 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 @media (max-width:430px){.controls.minimalControls{gap:7px!important}.circleBtn{width:50px!important;min-height:50px!important}.circleBtn .circleGlyph{font-size:20px!important}}
 @media (max-width:360px){.controls.minimalControls{gap:5px!important}.circleBtn{width:45px!important;min-height:45px!important}.circleBtn .circleGlyph{font-size:18px!important}.volumePopover,.languagePopover{bottom:calc(100% + 8px)}}
 
+
+/* v61B — mobile runtime recovery */
+@media (pointer:coarse){
+  .bar,.toast,.coachPanel,.pauseOverlay,.introOverlay,.volumePopover,.languagePopover{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  canvas{pointer-events:auto!important;touch-action:none!important;-webkit-user-select:none;user-select:none}
+}
+
 </style>
 </head>
 <body>
@@ -1498,9 +1505,23 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 (() => {
 'use strict';
 
+// v61B: local HTML files can have blocked storage on some mobile browsers.
+// Storage must never be allowed to abort the game runtime.
+function safeStorageGet(key){
+  try{ return window.localStorage ? window.localStorage.getItem(key) : null; }
+  catch(e){ return null; }
+}
+function safeStorageSet(key,value){
+  try{ if(window.localStorage) window.localStorage.setItem(key,value); return true; }
+  catch(e){ return false; }
+}
+
 const app = document.getElementById('app');
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d', { alpha:false, desynchronized:true });
+const ctx = canvas.getContext('2d', { alpha:false, desynchronized:true })
+  || canvas.getContext('2d', { alpha:false })
+  || canvas.getContext('2d');
+if(!ctx){ throw new Error('Canvas 2D is niet beschikbaar in deze browser.'); }
 const TWO = Math.PI * 2;
 const PERF_STORAGE = 'cellkitMiniRatioPerformanceV52';
 const PERF_PROFILES = {
@@ -1523,7 +1544,7 @@ let perfPreference = (()=>{
   try{
     const query = new URLSearchParams(location.search).get('quality');
     if(validPerfPreference(query)) return query;
-    const stored = localStorage.getItem(PERF_STORAGE);
+    const stored = safeStorageGet(PERF_STORAGE);
     return validPerfPreference(stored) ? stored : 'auto';
   }catch(e){ return 'auto'; }
 })();
@@ -1545,7 +1566,7 @@ let idSeq = 0, actions = 0, levelIndex = 0, roundIndex = 0, won = false;
 
 
 const LANGUAGE_STORAGE = 'cellkitLanguageV61';
-let currentLanguage = (()=>{ try{ const v=localStorage.getItem(LANGUAGE_STORAGE); return v==='en'?'en':'nl'; }catch(e){ return 'nl'; } })();
+let currentLanguage = (()=>{ try{ const v=safeStorageGet(LANGUAGE_STORAGE); return v==='en'?'en':'nl'; }catch(e){ return 'nl'; } })();
 const I18N = {
   nl:{
     cellRules:'Celregels',fusion:'Fusie',split:'Split',swap:'Wissel',brood:'Broed',sameMinus:'−1 bij die kleur',samePlus:'+1 bij die kleur',swapEffect:'ene kleur −1, andere +1',swapChoose:'kies vrij de nieuwe kleur',broodEffect:'eigen kleur ×2',
@@ -1634,7 +1655,7 @@ function applyStaticLanguage(){
   updateLanguageControl();
 }
 function setLanguage(lang,announce=true){
-  currentLanguage=lang==='en'?'en':'nl'; try{localStorage.setItem(LANGUAGE_STORAGE,currentLanguage)}catch(e){}
+  currentLanguage=lang==='en'?'en':'nl'; try{safeStorageSet(LANGUAGE_STORAGE,currentLanguage)}catch(e){}
   applyStaticLanguage();
   const R=ROUNDS&&ROUNDS[roundIndex]; if(R)R._solution=solveRound(R,7);
   renderTutorialCard(); setIntroCopy(); renderLevelStrip(); renderScorePanels(); setAudioButton(); syncPerformanceButton(); if(cells.length)updateUI(performance.now());
@@ -1761,14 +1782,14 @@ function normalizeWorldConfig(world, data){
 }
 function loadCellStyle(){
   try{
-    const saved = JSON.parse(localStorage.getItem(CELL_STYLE_STORAGE) || 'null');
+    const saved = JSON.parse(safeStorageGet(CELL_STYLE_STORAGE) || 'null');
     if(saved && typeof saved === 'object') return {...CELL_STYLE_BASE, ...saved};
   }catch(e){}
   return {...CELL_STYLE_BASE};
 }
 function loadWorldPresets(){
   try{
-    const saved = JSON.parse(localStorage.getItem(WORLD_PRESET_STORAGE) || 'null');
+    const saved = JSON.parse(safeStorageGet(WORLD_PRESET_STORAGE) || 'null');
     if(saved && typeof saved === 'object') return saved;
   }catch(e){}
   return {};
@@ -1821,8 +1842,8 @@ function invalidateCellSprites(){
   const R = typeof ROUNDS !== 'undefined' ? ROUNDS[roundIndex] : null;
   if(R && R.goal && typeof renderGoalCells === 'function') renderGoalCells(R.goal[0], R.goal[1], R.goal[2] ?? null);
 }
-function saveCellStyle(){ try{ localStorage.setItem(CELL_STYLE_STORAGE, JSON.stringify(cellStyle)); }catch(e){} }
-function saveWorldPresets(){ try{ localStorage.setItem(WORLD_PRESET_STORAGE, JSON.stringify(worldPresets)); }catch(e){} }
+function saveCellStyle(){ try{ safeStorageSet(CELL_STYLE_STORAGE, JSON.stringify(cellStyle)); }catch(e){} }
+function saveWorldPresets(){ try{ safeStorageSet(WORLD_PRESET_STORAGE, JSON.stringify(worldPresets)); }catch(e){} }
 function saveCurrentWorldConfig(){
   const w = Math.max(1, Math.min(11, Number(cellStyle.world)||1));
   worldPresets[String(w)] = { style:{...cellStyle, world:w}, bg: currentBackgroundId || backgroundForWorld(w) };
@@ -2097,8 +2118,8 @@ function easeOutCubic(t){ return 1-Math.pow(1-t,3); }
 const audio = {
   ctx:null, master:null, music:null, pad:null, shimmer:null, pulse:null,
   bgmEl:null, bgmFadeTimer:null, bgmSourceIndex:0, proceduralFallback:false,
-  enabled: localStorage.getItem(AUDIO_STORAGE) !== '0',
-  volume:(()=>{ try{ const v=Number(localStorage.getItem(AUDIO_VOLUME_STORAGE)); return Number.isFinite(v)?Math.max(0,Math.min(1,v)):.42; }catch(e){ return .42; } })(),
+  enabled: safeStorageGet(AUDIO_STORAGE) !== '0',
+  volume:(()=>{ try{ const v=Number(safeStorageGet(AUDIO_VOLUME_STORAGE)); return Number.isFinite(v)?Math.max(0,Math.min(1,v)):.42; }catch(e){ return .42; } })(),
   started:false, awaitingGesture:false, gestureUnlocked:false, startError:'',
   musicTimer:null,
   lastFx:0
@@ -2107,7 +2128,7 @@ function audioMasterTarget(){ return audio.enabled ? Math.max(.0001,Math.min(1,a
 function setAudioVolume(value, announce=false){
   audio.volume=Math.max(0,Math.min(1,Number(value)||0));
   clearInterval(audio.bgmFadeTimer); audio.bgmFadeTimer=null;
-  try{ localStorage.setItem(AUDIO_VOLUME_STORAGE,String(audio.volume)); }catch(e){}
+  try{ safeStorageSet(AUDIO_VOLUME_STORAGE,String(audio.volume)); }catch(e){}
   if(audio.bgmEl) audio.bgmEl.volume=audio.volume;
   if(audio.master && audio.ctx){
     const now=audio.ctx.currentTime;
@@ -2172,7 +2193,7 @@ function ensureAudio(){
 }
 function setAudioEnabled(on, announce=true){
   audio.enabled = !!on;
-  try{ localStorage.setItem(AUDIO_STORAGE, audio.enabled ? '1' : '0'); }catch(e){}
+  try{ safeStorageSet(AUDIO_STORAGE, audio.enabled ? '1' : '0'); }catch(e){}
   setAudioButton();
   if(audio.enabled){
     audio.awaitingGesture=false;
@@ -2513,7 +2534,7 @@ const ui = {
 const CELLKIT_DEVELOPER_MODE = (() => {
   try{
     const query = new URLSearchParams(location.search);
-    return query.get('dev') === '1' || localStorage.getItem('cellkitDeveloperMode') === '1';
+    return query.get('dev') === '1' || safeStorageGet('cellkitDeveloperMode') === '1';
   }catch(e){ return false; }
 })();
 app.classList.toggle('developerMode', CELLKIT_DEVELOPER_MODE);
@@ -8645,13 +8666,13 @@ function levelLabReportText(pack){
 
 function loadProgress(){
   try{
-    const raw = localStorage.getItem(PROGRESS_KEY);
+    const raw = safeStorageGet(PROGRESS_KEY);
     const data = raw ? JSON.parse(raw) : {};
     return data && typeof data === 'object' ? data : {};
   }catch(e){ return {}; }
 }
 function saveProgress(){
-  try{ localStorage.setItem(PROGRESS_KEY, JSON.stringify(levelProgress)); }catch(e){}
+  try{ safeStorageSet(PROGRESS_KEY, JSON.stringify(levelProgress)); }catch(e){}
 }
 function roundKey(li,ri){ return `${li}:${ri}`; }
 function getRoundProgress(li=levelIndex, ri=roundIndex){
@@ -9965,7 +9986,7 @@ function closePackIntro(markSeen=true){
   clearTimeout(introState.autoTimer);
   introState.autoTimer = 0;
   introState.anim = null;
-  if(markSeen && introState.key && levelIndex > 2){ try{ localStorage.setItem(introState.key,'1'); }catch(e){} }
+  if(markSeen && introState.key && levelIndex > 2){ try{ safeStorageSet(introState.key,'1'); }catch(e){} }
   actionLock = false;
 }
 function maybeShowPackIntro(){
@@ -9973,7 +9994,7 @@ function maybeShowPackIntro(){
   const spec=getIntroSpecForLevel(levelIndex);
   if(!spec || roundIndex!==0 || introState.open) return;
   const key=`cellkitIntroSeen:${levelIndex}`;
-  try{if(localStorage.getItem(key)==='1')return}catch(e){}
+  try{if(safeStorageGet(key)==='1')return}catch(e){}
   openPackIntro(spec);
 }
 
@@ -10013,6 +10034,27 @@ function emit(x,y,color,n){
   for(let i=0;i<n;i++){ const a=Math.random()*TWO, s=rnd(.4,2.2)*energy; particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r:rnd(1.2,3.4)*(0.85+energy*.18),a:rnd(.28,.75)*(0.8+energy*.25),life:rnd(320,720),color}); }
 }
 function ripple(x,y,color){ ripples.push({x,y,r:8,a:.7,life:1,color}); if(ripples.length>12) ripples.shift(); }
+function scheduleAnimationFailsafe(anim){
+  if(!anim) return;
+  setTimeout(()=>{
+    if(anim.done) return;
+    anim.done=true;
+    try{
+      if(anim.kind==='swap') finishSwapAnimation(anim);
+      else if(anim.kind==='split') finishSplitAnimation(anim);
+      else if(anim.kind==='fusion') finishFusionAnimation(anim);
+      else if(anim.kind==='brood') finishBroodAnimation(anim);
+    }catch(err){
+      console.error('Animation failsafe',err);
+      actionLock=false;
+      if(anim.cell){ anim.cell.swapping=false; anim.cell.splitting=false; anim.cell.brooding=false; }
+      if(anim.a) anim.a.fusing=false;
+      if(anim.b) anim.b.fusing=false;
+      updateUI();
+    }
+    animations=animations.filter(a=>a!==anim && !a.done);
+  },Math.max(500,(Number(anim.dur)||900)+350));
+}
 function activate(c){
   if(won || c.dead || actionLock) return;
   if(tutorialMode && !tutorialAllowsCell(c)){ say(tutorialWrongTapMessage()); showActionPreview(c,true); return; }
@@ -10094,12 +10136,14 @@ function actSwap(c,toSpecies=nextSpeciesForRound(c.species)){
   const fromSpecies = c.species;
   c.swapping = true;
   actionLock = true;
-  animations.push({
+  const anim = {
     kind:'swap', cell:c, fromSpecies, toSpecies,
     sx:c.x, sy:c.y, sr:c.r,
     start:performance.now(), dur:760,
     seed:c.id*19.73 + (fromSpecies==='blue'?4.1:(fromSpecies==='green'?9.2:14.7))
-  });
+  };
+  animations.push(anim);
+  scheduleAnimationFailsafe(anim);
   emit(c.x,c.y,roleAccent('swap'),10);
   ripple(c.x,c.y,roleAccent('swap'));
   playSwapSound();
@@ -10118,11 +10162,13 @@ function actBrood(c){
   }
   c.brooding = true;
   actionLock = true;
-  animations.push({
+  const anim = {
     kind:'brood', cell:c, species, count:same, targets,
     sx:c.x, sy:c.y, sr:c.r, start:performance.now(), dur:1140 + same*145,
     seed:c.id*23.41 + same*9.7
-  });
+  };
+  animations.push(anim);
+  scheduleAnimationFailsafe(anim);
   emit(c.x,c.y,roleAccent('brood'),10);
   ripple(c.x,c.y,roleAccent('brood'));
   playBroodSound();
@@ -10134,12 +10180,14 @@ function actSplit(c){
   const p2 = findFreeNearReserved(c.x+18,c.y,r,c.id+7,[{...p1,r}]);
   c.splitting = true;
   actionLock = true;
-  animations.push({
+  const anim = {
     kind:'split', cell:c, species, r,
     sx:c.x, sy:c.y, sr:c.r,
     p1, p2, start:performance.now(), dur:1040,
     seed:c.id*17.13
-  });
+  };
+  animations.push(anim);
+  scheduleAnimationFailsafe(anim);
   emit(c.x,c.y,roleAccent('split'),10);
   playSplitSound();
   say('Splitcel laadt op… ze knijpt samen en wordt twee fusiecellen.');
@@ -10156,7 +10204,7 @@ function actFusion(c, partner){
   const len=Math.max(1, Math.hypot(dx,dy));
   c.fusing = true; partner.fusing = true;
   actionLock = true;
-  animations.push({
+  const anim = {
     kind:'fusion', a:c, b:partner, species,
     ax:c.x, ay:c.y, ar:c.r,
     bx:partner.x, by:partner.y, br:partner.r,
@@ -10164,7 +10212,9 @@ function actFusion(c, partner){
     ux:dx/len, uy:dy/len, px:-dy/len, py:dx/len,
     distance:len, start:performance.now(), dur:1180,
     seed:c.id*31.7 + partner.id*11.3
-  });
+  };
+  animations.push(anim);
+  scheduleAnimationFailsafe(anim);
   emit(mx,my,roleAccent('fusion'),12);
   ripple(mx,my,roleAccent('fusion'));
   playFusionSound();
@@ -10292,14 +10342,15 @@ canvas.addEventListener('pointermove', e=>{
   }
 });
 canvas.addEventListener('pointerleave', ()=>{ hoverCellId = null; });
-canvas.addEventListener('pointerdown', e=>{
+let suppressSyntheticCanvasClickUntil = 0;
+function handleCanvasActivation(e, clientX, clientY){
   handleFirstAudioGesture();
   const r = canvas.getBoundingClientRect();
-  const localX = e.clientX-r.left;
-  const localY = e.clientY-r.top;
+  const localX = clientX-r.left;
+  const localY = clientY-r.top;
   const choice = swapChoiceAt(localX,localY);
   if(choice){
-    e.preventDefault();
+    if(e && e.preventDefault) e.preventDefault();
     chooseSwapTarget(choice.species);
     return;
   }
@@ -10312,8 +10363,8 @@ canvas.addEventListener('pointerdown', e=>{
       return;
     }
   }
-  if(isDoubleTapForFullscreen(e, localX, localY, c)){
-    e.preventDefault();
+  if(e && isDoubleTapForFullscreen(e, localX, localY, c)){
+    if(e.preventDefault) e.preventDefault();
     toggleAppFullscreen();
     return;
   }
@@ -10321,6 +10372,24 @@ canvas.addEventListener('pointerdown', e=>{
     showActionPreview(c,true);
     activate(c);
   }
+}
+canvas.addEventListener('pointerdown', e=>{
+  suppressSyntheticCanvasClickUntil = performance.now()+500;
+  handleCanvasActivation(e,e.clientX,e.clientY);
+},{passive:false});
+// Fallback for older/embedded mobile browsers without Pointer Events.
+canvas.addEventListener('touchend', e=>{
+  if(window.PointerEvent) return;
+  const touch=e.changedTouches && e.changedTouches[0];
+  if(!touch) return;
+  e.preventDefault();
+  suppressSyntheticCanvasClickUntil = performance.now()+500;
+  handleCanvasActivation(e,touch.clientX,touch.clientY);
+},{passive:false});
+// Final fallback when only synthetic click events reach a locally opened HTML file.
+canvas.addEventListener('click', e=>{
+  if(performance.now() < suppressSyntheticCanvasClickUntil) return;
+  handleCanvasActivation(e,e.clientX,e.clientY);
 });
 ui.reset.addEventListener('click',()=>{ handleFirstAudioGesture(); playUiClick(); if(tutorialMode){ startTutorialRound(levelIndex); return; } loadRound(roundIndex); });
 ui.prev.addEventListener('click',()=>{
@@ -10350,7 +10419,7 @@ function applyPerformanceProfile(preference, announce=true){
   app.classList.remove('perf-high','perf-balanced','perf-lite');
   perfName=nextName; PERF=PERF_PROFILES[perfName]; DPR=Math.max(1,Math.min(PERF.dpr,window.devicePixelRatio||1));
   app.classList.add('perf-'+perfName);
-  try{ localStorage.setItem(PERF_STORAGE,perfPreference); }catch(e){}
+  try{ safeStorageSet(PERF_STORAGE,perfPreference); }catch(e){}
   frameCostSamples=[]; lastRenderedAt=0; last=performance.now();
   if(changed) clearBackgroundCache(); else { trimBackgroundCache(); invalidateStaticBackground(); }
   if(changed && typeof spriteCache!=='undefined'){
@@ -10386,7 +10455,7 @@ function toggleCoachPanel(){
   handleFirstAudioGesture(); playUiClick();
   const show = !ui.coach?.classList.contains('show');
   if(ui.coach) ui.coach.classList.toggle('show', show);
-  if(show){ renderCoachIcons(); localStorage.setItem('cellkitV13CoachSeen','1'); ui.qaPanel?.classList.remove('show'); }
+  if(show){ renderCoachIcons(); safeStorageSet('cellkitV13CoachSeen','1'); ui.qaPanel?.classList.remove('show'); }
   say(show ? 'Celregels zichtbaar. De iconen zijn dezelfde celtypes als in het spel.' : 'Uitleg verborgen.');
 }
 function toggleQaPanel(){
@@ -11504,17 +11573,39 @@ function drawParticles(){
 function draw(now){
   drawBackground(now); drawGate(now); drawParticles(); drawCells(now); drawSwapSelector(now); drawSwapAnimations(now); drawSplitAnimations(now); drawBroodAnimations(now); drawFusionAnimations(now); drawActionPreview(now);
 }
-function frame(now){
-  requestAnimationFrame(frame);
-  if(document.hidden) return;
+let frameHeartbeat = performance.now();
+function renderRuntimeStep(now){
   const interval = 1000 / PERF.fps;
   if(lastRenderedAt && now-lastRenderedAt < interval-.5) return;
   const dt = Math.min(50, Math.max(1, now-last));
-  last=now; lastRenderedAt=now;
+  last=now; lastRenderedAt=now; frameHeartbeat=now;
   const costStart=performance.now();
   update(dt,now); updateGate(dt); updateMetaHud(now); draw(now);
   monitorFrameCost(performance.now()-costStart);
 }
+function frame(now){
+  requestAnimationFrame(frame);
+  if(document.hidden) return;
+  try{ renderRuntimeStep(now); }
+  catch(err){
+    console.error('CellKit frame error',err);
+    actionLock=false;
+    frameHeartbeat=performance.now();
+  }
+}
+// Some mobile file viewers throttle or lose requestAnimationFrame. This keeps actions alive.
+setInterval(()=>{
+  if(document.hidden) return;
+  const now=performance.now();
+  if(now-frameHeartbeat < 650) return;
+  try{
+    lastRenderedAt=0;
+    renderRuntimeStep(now);
+  }catch(err){
+    console.error('CellKit mobile frame recovery',err);
+    actionLock=false;
+  }
+},400);
 
 document.addEventListener('visibilitychange',()=>{
   last=performance.now(); lastRenderedAt=0;
